@@ -28,12 +28,17 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -48,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -59,6 +65,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.erronka.ui.theme.ErronkaTheme
@@ -71,9 +78,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             ErronkaTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    AppNabigazioa(modifier = Modifier.padding(innerPadding))
-                }
+                AppNabigazioa()
             }
         }
     }
@@ -83,36 +88,75 @@ class MainActivity : ComponentActivity() {
 fun AppNabigazioa(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val navController = rememberNavController()
+    val entradaActuala by navController.currentBackStackEntryAsState()
+    val rutaActuala = entradaActuala?.destination?.route
+    val barraIkusgai = rutaActuala == "zerrenda" || rutaActuala == "erreserbak"
     var ekitaldiak by remember { mutableStateOf<List<Ekitaldia>>(emptyList()) }
     var kargatzen by remember { mutableStateOf(true) }
+    var erreserbak by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val erreserbatuak = ekitaldiak.filter { it.id in erreserbak }
 
     LaunchedEffect(Unit) {
         ekitaldiak = withContext(Dispatchers.IO) {
-            JsonIrakurlea(context).irakurriEkitaldiak()
+            JsonIrakurlea(context).irakurriEkitaldiak().sortedBy { it.hasieraData }
         }
         kargatzen = false
     }
 
-    NavHost(
-        navController = navController,
-        startDestination = "zerrenda",
-        modifier = modifier
-    ) {
-        composable("zerrenda") {
-            Ekitaldiak(
-                ekitaldiak = ekitaldiak,
-                kargatzen = kargatzen,
-                onEkitaldiaClick = { e -> navController.navigate("xehetasuna/${e.id}") }
-            )
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        bottomBar = {
+            if (barraIkusgai) {
+                NabigazioBarra(
+                    rutaActuala = rutaActuala,
+                    onNabigatu = { ruta ->
+                        navController.navigate(ruta) {
+                            popUpTo("zerrenda")
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
         }
-        composable(
-            route = "xehetasuna/{id}",
-            arguments = listOf(navArgument("id") { type = NavType.StringType })
-        ) { entry ->
-            val id = entry.arguments?.getString("id")
-            val ekitaldia = ekitaldiak.find { it.id == id }
-            if (ekitaldia != null) {
-                XehetasunaPantaila(ekitaldia, onAtzera = { navController.popBackStack() })
+    ) { innerPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = "zerrenda",
+            modifier = Modifier.padding(innerPadding)
+        ) {
+            composable("zerrenda") {
+                Ekitaldiak(
+                    ekitaldiak = ekitaldiak,
+                    kargatzen = kargatzen,
+                    onEkitaldiaClick = { e -> navController.navigate("xehetasuna/${e.id}") }
+                )
+            }
+            composable("erreserbak") {
+                ErreserbakPantaila(
+                    ekitaldiak = erreserbatuak,
+                    onEkitaldiaClick = { e -> navController.navigate("xehetasuna/${e.id}") }
+                )
+            }
+            composable(
+                route = "xehetasuna/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType })
+            ) { entry ->
+                val id = entry.arguments?.getString("id")
+                val ekitaldia = ekitaldiak.find { it.id == id }
+                if (ekitaldia != null) {
+                    XehetasunaPantaila(
+                        e = ekitaldia,
+                        erreserbatuta = ekitaldia.id in erreserbak,
+                        onErreserbatu = {
+                            erreserbak = if (ekitaldia.id in erreserbak) {
+                                erreserbak - ekitaldia.id
+                            } else {
+                                erreserbak + ekitaldia.id
+                            }
+                        },
+                        onAtzera = { navController.popBackStack() }
+                    )
+                }
             }
         }
     }
@@ -137,15 +181,21 @@ fun Ekitaldiak(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        Image(
-            painter = painterResource(id = R.drawable.fondo),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
-
-        Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFFFAF3E8))
+    ) {
+        // Cabecera verde con esquinas inferiores redondeadas
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Color(0xFF1B5E57),
+                    RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
+                )
+                .padding(bottom = 20.dp)
+        ) {
             Text(
                 text = "Arrigorriaga Kanping",
                 fontSize = 20.sp,
@@ -154,7 +204,7 @@ fun Ekitaldiak(
                 modifier = Modifier.padding(20.dp, 40.dp, 16.dp, 0.dp)
             )
             Text(
-                text = "Agenda Kulturala",
+                text = "Agenda Kulturala 2026",
                 fontSize = 35.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
@@ -179,65 +229,141 @@ fun Ekitaldiak(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
             )
+        }
 
-            Spacer(modifier = Modifier.height(45.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(motak) { mota ->
-                    FilterChip(
-                        selected = aukeratutakoMota == mota,
-                        onClick = {
-                            // Si pulsas el que ya está elegido, se quita el filtro
-                            aukeratutakoMota = if (aukeratutakoMota == mota) null else mota
-                        },
-                        label = { Text(mota) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = koloreaMota(mota),
-                            selectedLabelColor = Color.White
-                        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(motak) { mota ->
+                FilterChip(
+                    selected = aukeratutakoMota == mota,
+                    onClick = {
+                        // Si pulsas el que ya está elegido, se quita el filtro
+                        aukeratutakoMota = if (aukeratutakoMota == mota) null else mota
+                    },
+                    label = { Text(mota) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = koloreaMota(mota),
+                        selectedLabelColor = Color.White
                     )
-                }
-            }
-
-            Text(
-                text = "Ekitaldi guztiak",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.Black,
-                modifier = Modifier.padding(20.dp, 16.dp, 16.dp, 8.dp)
-            )
-
-            if (kargatzen) {
-                CircularProgressIndicator(modifier = Modifier.padding(20.dp))
-            } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(bottom = 90.dp)
-                ) {
-                    items(iragazita, key = { it.id }) { e ->
-                        EkitaldiaCard(e, onClick = { onEkitaldiaClick(e) })
-                    }
-                }
+                )
             }
         }
 
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(100.dp)
-                .background(Color(0xFFE8E4DC))
-                .border(
-                    width = 3.dp,
-                    color = Color(0xFF1B5E57)
-                )
+        Text(
+            text = "Ekitaldi guztiak",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color.Black,
+            modifier = Modifier.padding(20.dp, 16.dp, 16.dp, 8.dp)
         )
+
+        if (kargatzen) {
+            CircularProgressIndicator(modifier = Modifier.padding(20.dp))
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(bottom = 16.dp)
+            ) {
+                items(iragazita, key = { it.id }) { e ->
+                    EkitaldiaCard(e, onClick = { onEkitaldiaClick(e) })
+                }
+            }
+        }
     }
 }
 
+@Composable
+fun ErreserbakPantaila(
+    ekitaldiak: List<Ekitaldia>,
+    onEkitaldiaClick: (Ekitaldia) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFFFAF3E8))
+    ) {
+        Text(
+            text = "Erreserbak",
+            fontSize = 35.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF1B5E57),
+            modifier = Modifier.padding(20.dp, 40.dp, 16.dp, 16.dp)
+        )
+
+        if (ekitaldiak.isEmpty()) {
+            Text(
+                text = "Ez daukazu erreserbarik",
+                color = Color.DarkGray,
+                fontSize = 16.sp,
+                modifier = Modifier.padding(20.dp)
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(bottom = 16.dp)
+            ) {
+                items(ekitaldiak, key = { it.id }) { e ->
+                    EkitaldiaCard(e, onClick = { onEkitaldiaClick(e) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun NabigazioBarra(rutaActuala: String?, onNabigatu: (String) -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(100.dp)
+            .background(Color(0xFFE8E4DC))
+            .border(width = 3.dp, color = Color(0xFF1B5E57))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            NabigazioBotoia(
+                testua = "Agenda",
+                ikonoa = Icons.Default.DateRange,
+                aktiboa = rutaActuala == "zerrenda",
+                onClick = { onNabigatu("zerrenda") }
+            )
+            NabigazioBotoia(
+                testua = "Erreserbak",
+                ikonoa = Icons.Default.CheckCircle,
+                aktiboa = rutaActuala == "erreserbak",
+                onClick = { onNabigatu("erreserbak") }
+            )
+        }
+    }
+}
+
+@Composable
+fun NabigazioBotoia(
+    testua: String,
+    ikonoa: ImageVector,
+    aktiboa: Boolean,
+    onClick: () -> Unit
+) {
+    val kolorea = if (aktiboa) Color(0xFF1B5E57) else Color.Gray
+
+    Column(
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(imageVector = ikonoa, contentDescription = null, tint = kolorea)
+        Text(text = testua, fontSize = 12.sp, color = kolorea)
+    }
+}
 
 @Composable
 fun EkitaldiaCard(e: Ekitaldia, onClick: () -> Unit) {
@@ -313,9 +439,13 @@ fun EkitaldiaCard(e: Ekitaldia, onClick: () -> Unit) {
     }
 }
 
-
 @Composable
-fun XehetasunaPantaila(e: Ekitaldia, onAtzera: () -> Unit) {
+fun XehetasunaPantaila(
+    e: Ekitaldia,
+    erreserbatuta: Boolean,
+    onErreserbatu: () -> Unit,
+    onAtzera: () -> Unit
+) {
     val context = LocalContext.current
     val kolorea = koloreaMota(e.mota)
     val data = if (e.hasieraData == e.amaieraData) e.hasieraData
@@ -375,6 +505,17 @@ fun XehetasunaPantaila(e: Ekitaldia, onAtzera: () -> Unit) {
                 "Herria",
                 listOf(e.herria, e.lurraldea).filter { it.isNotEmpty() }.joinToString(", ")
             )
+
+            // Botón de reservar: naranja si no está reservado, verde si lo está
+            Button(
+                onClick = onErreserbatu,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (erreserbatuta) Color(0xFF3FA66B) else Color(0xFFF0A74A)
+                )
+            ) {
+                Text(if (erreserbatuta) "Erreserba egina" else "Erreserba egin")
+            }
 
             if (e.esteka.isNotEmpty()) {
                 Button(
