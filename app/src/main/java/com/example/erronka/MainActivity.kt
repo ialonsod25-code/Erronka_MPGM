@@ -186,7 +186,7 @@ fun Ekitaldiak(
             .fillMaxSize()
             .background(Color(0xFFFAF3E8))
     ) {
-        // Cabecera verde con esquinas inferiores redondeadas
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -241,7 +241,6 @@ fun Ekitaldiak(
                 FilterChip(
                     selected = aukeratutakoMota == mota,
                     onClick = {
-                        // Si pulsas el que ya está elegido, se quita el filtro
                         aukeratutakoMota = if (aukeratutakoMota == mota) null else mota
                     },
                     label = { Text(mota) },
@@ -260,7 +259,7 @@ fun Ekitaldiak(
             color = Color.Black,
             modifier = Modifier.padding(20.dp, 16.dp, 16.dp, 8.dp)
         )
-
+        
         if (kargatzen) {
             CircularProgressIndicator(modifier = Modifier.padding(20.dp))
         } else {
@@ -506,7 +505,7 @@ fun XehetasunaPantaila(
                 listOf(e.herria, e.lurraldea).filter { it.isNotEmpty() }.joinToString(", ")
             )
 
-            // Botón de reservar: naranja si no está reservado, verde si lo está
+
             Button(
                 onClick = onErreserbatu,
                 modifier = Modifier.fillMaxWidth(),
@@ -514,7 +513,7 @@ fun XehetasunaPantaila(
                     containerColor = if (erreserbatuta) Color(0xFF3FA66B) else Color(0xFFF0A74A)
                 )
             ) {
-                Text(if (erreserbatuta) "Erreserba egina" else "Erreserba egin")
+                Text(if (erreserbatuta) "Erreserba eginda" else "Erreserba egin")
             }
 
             if (e.esteka.isNotEmpty()) {
